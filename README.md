@@ -3,9 +3,9 @@
 
 The main problem I faced while working on the app is that Microsoft OleDb Provider does not allow you to fetch information
 of stored procedures as it is supposed to be. Because of that I was forced to parse them with regular expressions, which
-time to time causes unexpected bugs.
+time to time causes unexpected bugs. 
 
-## Below you can find several shots of app in action.
+## Below you can find several shots of app in action. This is how the program looks like in Windows Server 2008.
 **Query Constructor Page**
 ![screen](https://raw.githubusercontent.com/ympo2oo2/winforms-access-behold/master/img/1.png)
 
