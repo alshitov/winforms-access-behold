@@ -17,9 +17,9 @@ namespace BDZ
     {
         #region FormInner
         // TODO: move all connection code to commandExecutor
-        static OleDbConnection connection = new OleDbConnection(@"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=H:\БДЗ.accdb");
+        static OleDbConnection connection;
         static OleDbCommand command = new OleDbCommand();
-        static CommandExecutor commandExecutor = new CommandExecutor(connection, command);
+        static CommandExecutor commandExecutor;
 
         private static IList<DBTableInfo> infoDB;
         private static List<DBQueryInfo> queries;
@@ -35,8 +35,41 @@ namespace BDZ
         private TextBox fieldTextBox;
         private string lastAdded = "";
 
+        public void handleExit()
+        {
+            if (System.Windows.Forms.Application.MessageLoop)
+            {
+                System.Windows.Forms.Application.Exit();
+            }
+            else
+            {
+                System.Environment.Exit(1);
+            }
+        }
+
         public Form1()
         {
+            OpenFileDialog OPF = new OpenFileDialog();
+            
+            if (OPF.ShowDialog() != DialogResult.OK)
+            {
+                handleExit();
+            }
+            else
+            {
+                string fileName = OPF.FileName;
+                if (!(new string[] { "accdb", "db", "mdb", "mdf" }.Contains(fileName.Split('.').Last())))
+                {
+                    Console.WriteLine("Unknown DB extension. Please, specify new path.");
+                    handleExit();
+                }
+                else
+                {
+                    connection = new OleDbConnection(@"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" + fileName);
+                    commandExecutor = new CommandExecutor(connection, command);
+                }
+            }
+
             // Constructor => Init UI
             InitializeComponent();
         }
@@ -674,7 +707,7 @@ namespace BDZ
                         existingFunctionParamField
                     );
 
-                    commandExecutor.exactProcOrFuncChosenString = func.funcString;
+                    commandExecutor.exactProcOrFuncChosenString = func.funcName;
                     commandExecutor.existingTabBoxIndexChosen = 2;
                     break;
                 }
@@ -733,6 +766,11 @@ namespace BDZ
              */
             Dictionary<string, string> __params__ = new Dictionary<string, string>();
 
+            if (commandExecutor.exactProcOrFuncQueryParams != null && commandExecutor.exactProcOrFuncQueryParams.Count > 0)
+            {
+                commandExecutor.exactProcOrFuncQueryParams.Clear();
+            }
+
             for (int i = 0; i < controlsPanel.Controls.Count - 1; i+=2)
             {
                 __params__.Add(
@@ -767,6 +805,7 @@ namespace BDZ
                     ).Trim();
                 }
 
+                //commandExecutor.exactProcOrFuncQueryParams.Clear();
                 commandExecutor.exactProcOrFuncQueryParams = collectProcOrFuncParams(
                     controlsPanel: newControllersSetSplitContainer.Panel1
                 );
@@ -775,9 +814,13 @@ namespace BDZ
             {
                 // ExistingTab
                 if (commandExecutor.existingTabBoxIndexChosen == 1)
+                {
+                    //commandExecutor.exactProcOrFuncQueryParams.Clear();
                     commandExecutor.exactProcOrFuncQueryParams = collectProcOrFuncParams(existingProcParamField);
+                }
                 else if (commandExecutor.existingTabBoxIndexChosen == 2)
                 {
+                    //commandExecutor.exactProcOrFuncQueryParams.Clear();
                     commandExecutor.exactProcOrFuncQueryParams = collectProcOrFuncParams(existingFunctionParamField);
                 }
             }
@@ -839,7 +882,7 @@ namespace BDZ
             }
             catch (System.NullReferenceException)
             {
-                // popup.show("No headers was returned from query result");
+                // Console.WriteLine("No headers was returned from query result");
             }
         }
 
@@ -951,7 +994,6 @@ namespace BDZ
         public List<String> queryTables = new List<String>();
         // WHERE, START WITH, HAVING, CONNECT BY
         public string queryConditions = "WHERE NULL IS NULL";
-        private Popup popup = new Popup();
 
         public CommandExecutor(OleDbConnection connection, OleDbCommand command)
         {
@@ -984,7 +1026,7 @@ namespace BDZ
             }
             catch (System.ArgumentOutOfRangeException)
             {
-                popup.show("Cannot execute UPDATE or INSERT without new fields values");
+                Console.WriteLine("Cannot execute UPDATE or INSERT without new fields values");
             }
 
             return sb.ToString();
@@ -1006,10 +1048,10 @@ namespace BDZ
                     case 0:
                         return "*";
                     case 1:
-                        popup.show("Tables list must not be empty");
+                        Console.WriteLine("Tables list must not be empty");
                         break;
                     case 2:
-                        popup.show("Please, specify new values list");
+                        Console.WriteLine("Please, specify new values list");
                         break;
                     default:
                         break;
@@ -1028,7 +1070,7 @@ namespace BDZ
             }
             catch (System.ArgumentOutOfRangeException)
             {
-                popup.show("List is empty");
+                Console.WriteLine("List is empty");
             }
             return sb.ToString();  
         }
@@ -1198,7 +1240,7 @@ namespace BDZ
                     Console.WriteLine("No Conditions Found!");
                     // Build Conditions From Given Fields
 
-                    conditionsString = dictToString(exactProcOrFuncQueryParams, needNames: true);
+                    conditionsString = " WHERE " + dictToString(exactProcOrFuncQueryParams, needNames: true);
                 }
 
                 Console.WriteLine(String.Format(
@@ -1214,8 +1256,6 @@ namespace BDZ
                     tableName,
                     conditionsString
                 );
-
-                //return "SELECT * FROM Абитуриенты";
             }
         }
 
@@ -1287,8 +1327,6 @@ namespace BDZ
                         execReader.Close();
                         // Execute New Query To Get Changed Row(s) For Displaying
                         execCmd.CommandText = generateStringToReturnResult(stringToExecute);
-                        Console.WriteLine(1296);
-                        Console.WriteLine(execCmd.CommandText);
                         OleDbDataReader newExecReader = execCmd.ExecuteReader();
                         result = readFromReader(newExecReader);
                         // Retrieve Table Schema
@@ -1296,43 +1334,24 @@ namespace BDZ
                         resultingTableHeaders = fetchResultingTableFields(newSchemaTable);
                         execReader.Close();
                     }
-
-                    /*if (!(fromExistingQuery) && !(popup.remember) && (popup.dialog()))
-                    {
-                        string newQuery = createGeneratedQueryToSave(popup.name, stringToExecute);
-                        execCmd.CommandType = CommandType.Text;
-                        execCmd.CommandText = newQuery;
-                        // Execute CREATE query
-                        execCmd.ExecuteReader();
-                    }*/
                 }
 
                 // If Given Query Is Stored Function 
                 else if (fromExistingFunction)
                 {
                     if ((exactProcOrFuncQueryParams != null) && (exactProcOrFuncQueryParams.Count > 0))
-
                         foreach (KeyValuePair<string, string> parameter in exactProcOrFuncQueryParams)
-                            execCmd.Parameters.AddWithValue(parameter.Key.ToString(), parameter.Value.ToString());
+                        {
+                            execCmd.Parameters.AddWithValue(Form1.unwrap(parameter.Key), parameter.Value);
+                        }
 
-                    if (stringToExecute.EndsWith(";"))
-                    {
-                        stringToExecute = stringToExecute.Remove(
-                            stringToExecute.Length - 1, 1
-                        );
-                    }
-
-                    execCmd.CommandText = String.Format(
-                        "SELECT * FROM [{0}]",
-                        stringToExecute
-                    );
-                    Console.WriteLine(execCmd.CommandText);
-                    OleDbDataReader ExecReader = execCmd.ExecuteReader();
-                    result = readFromReader(ExecReader);
-                    // Retrieve Table Schema
-                    DataTable newSchemaTable = ExecReader.GetSchemaTable();
+                    execCmd.CommandType = CommandType.Text;
+                    execCmd.CommandText = "SELECT * FROM [" + stringToExecute + "]";
+                    OleDbDataReader newExecReader = execCmd.ExecuteReader();
+                    result = readFromReader(newExecReader);
+                    DataTable newSchemaTable = newExecReader.GetSchemaTable();
                     resultingTableHeaders = fetchResultingTableFields(newSchemaTable);
-                    ExecReader.Close();
+                    newExecReader.Dispose();
                 }
 
                 // If Given Query Is Stored Procedure 
@@ -1341,37 +1360,24 @@ namespace BDZ
                     // Execute Stored Procedure
                     if ((exactProcOrFuncQueryParams != null) && (exactProcOrFuncQueryParams.Count > 0))
                         foreach (KeyValuePair<string, string> parameter in exactProcOrFuncQueryParams)
+                        {
                             execCmd.Parameters.AddWithValue(parameter.Key, parameter.Value);
-
+                        }
+                    
                     execCmd.CommandText = stringToExecute;
-                    try
-                    {
-                        int countChanged = execCmd.ExecuteNonQuery();
-                        popup.show(String.Format("Задействовано: {0} строк.", countChanged), title: "Result");
-                    }
-                    catch (OleDbException)
-                    {
-                        popup.show("Procedure execution failed");
-                    }
+                    int countChanged = execCmd.ExecuteNonQuery();
+                    Console.WriteLine(String.Format("{0} rows affected", countChanged));
                     execCmd.Parameters.Clear();
-
-                    // Execute New Query To Get Changed Row(s) For Displaying
-                    execCmd.CommandText = generateStringToReturnResult(stringToExecute);
-                    OleDbDataReader newExecReader = execCmd.ExecuteReader();
-                    result = readFromReader(newExecReader);
-                    // Retrieve Table Schema
-                    DataTable newSchemaTable = newExecReader.GetSchemaTable();
-                    resultingTableHeaders = fetchResultingTableFields(newSchemaTable);
-                    newExecReader.Close();
                 }
             }
             catch (OleDbException)
             {
-                popup.show("Query is incorrect. Check spelling");
+                Console.WriteLine("Query is incorrect. Check spelling");
             }
             finally
             {
-                execConn.Close();
+                if (execConn != null)
+                    execConn.Close();
             }
 
             return result;  
@@ -1384,116 +1390,4 @@ namespace BDZ
             return String.Format(sampleSQL, queryName, stringToExecute);
         }
     }
-
-    public partial class Popup : Form
-    {
-        private bool save;
-        public string name;
-        public bool remember;
-
-        public Popup()
-        {
-        }
-
-        public void show(string message, string title = "Error Caught")
-        {
-            this.Text = title;
-            this.Width = 230;
-            this.Height = 100;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-
-            Label messageLabel = new Label();
-            messageLabel.Text = message;
-            messageLabel.Location = new Point(10, 10);
-            messageLabel.Width = 200;
-            messageLabel.Height = 40;
-
-            Button ok = new Button();
-            ok.Click += ok_Click;
-            ok.Text = "OK";
-            ok.Width = 100;
-            ok.Location = new Point(10, 50);
-
-            Button cancel = new Button();
-            cancel.Click += ok_Click;
-            cancel.Text = "Cancel";
-            cancel.Width = 100;
-            cancel.Location = new Point(115, 50);
-
-            this.Controls.AddRange(
-                new Control[] { messageLabel, ok, cancel }
-            );
-
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.ShowDialog();
-        }
-
-        public bool dialog()
-        {
-            this.Text = "Choose action";
-            this.Width = 230;
-            this.Height = 160;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-
-            Label messageLabel = new Label();
-            messageLabel.Text = "Save query to DB? You can use it later";
-            messageLabel.Location = new Point(10, 10);
-            messageLabel.Width = 200;
-            messageLabel.Height = 40;
-
-            TextBox name = new TextBox();
-            name.Text = "Insert name";
-            name.Location = new Point(10, 50);
-            name.Width = 200;
-
-            Button yes = new Button();
-            yes.Click += yes_Click;
-            yes.Text = "Yes";
-            yes.Width = 100;
-            yes.Location = new Point(10, 80);
-
-            Button no = new Button();
-            no.Click += no_Click;
-            no.Text = "Cancel";
-            no.Width = 100;
-            no.Location = new Point(115, 80);
-
-            RadioButton rememberBtn = new RadioButton();
-            rememberBtn.CheckedChanged += remember_CheckedChanged;
-            rememberBtn.Text = "Rememeber Choice";
-            rememberBtn.Location = new Point(10, 110);
-
-            this.Controls.AddRange(
-                new Control[] { messageLabel, name, yes, no, rememberBtn }
-            );
-
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.ShowDialog();
-
-            this.name = name.Text;
-            return save;
-        }
-
-        private void ok_Click(object sender, EventArgs e)
-        {
-            this.Close();
-        }
-
-        private void yes_Click(object sender, EventArgs e)
-        {
-            save = true;
-            this.Close();
-        }
-
-        private void no_Click(object sender, EventArgs e)
-        {
-            save = false;
-            this.Close();
-        }
-
-        private void remember_CheckedChanged(object sender, EventArgs e)
-        {
-            this.remember = !this.remember;
-        }
-     }
 }
